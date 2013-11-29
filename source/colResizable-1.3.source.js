@@ -33,7 +33,10 @@
 	var I = parseInt;
 	var M = Math;
 	var ie =$.browser.msie;
-	var S;
+	var S = {
+		get: function(k){return false;},
+		set: function(k, v){}
+	};
 	try{S = sessionStorage;}catch(e){}	//Firefox crashes when executed as local file system
 	
 	//append required CSS rules  
@@ -48,6 +51,18 @@
 	var init = function( tb, options){	
 		var t = $(tb);										//the table object is wrapped
 		if(options.disable) return destroy(t);				//the user is asking to destroy a previously colResized table
+		if(t.p) {
+			if(options.storage) {
+				S = options.storage;		//use user defined storage
+			} else {
+				var ss = null;
+				try{ss = sessionStorage;}catch(e){}
+				if(ss) {
+					S.get = function(k){return ss[k];};
+					S.set = function(k, v){ss[k]=v;};
+				}
+			}
+		}
 		var	id = t.id = t.attr(ID) || SIGNATURE+count++;	//its id is obtained, if null new one is generated		
 		t.p = options.postbackSafe; 						//shortcut to detect postback safe 		
 		if(!t.is("table") || tables[id]) return; 			//if the object is not a table or if it was already processed then it is ignored.
@@ -86,7 +101,7 @@
 		if(!th.length) th = t.find(">tbody>tr:first>th,>tr:first>th,>tbody>tr:first>td, >tr:first>td");	 //but headers can also be included in different ways
 		t.cg = t.find("col"); 						//a table can also contain a colgroup with col elements		
 		t.ln = th.length;							//table length is stored	
-		if(t.p && S && S[t.id])memento(t,th);		//if 'postbackSafe' is enabled and there is data for the current table, its coloumn layout is restored
+		if(t.p && S && S.get(t.id))memento(t,th);		//if 'postbackSafe' is enabled and there is data for the current table, its coloumn layout is restored
 		th.each(function(i){						//iterate through the table column headers			
 			var c = $(this); 						//jquery wrap for the current column			
 			var g = $(t.gc.append('<div class="JCLRgrip"></div>')[0].lastChild); //add the visual node to be used as grip
@@ -116,11 +131,11 @@
 	 * @param {jQuery ref} th - reference to the first row elements (only set in deserialization)
 	 */
 	var memento = function(t, th){ 
-		var w,m=0,i=0,aux =[];
+		var w,m=0,i=0,aux =[],cont;
 		if(th){										//in deserialization mode (after a postback)
 			t.cg.removeAttr("width");
-			if(t.opt.flush){ S[t.id] =""; return;} 	//if flush is activated, stored data is removed
-			w = S[t.id].split(";");					//column widths is obtained
+			if(t.opt.flush){ S.set(t.id, ''); return;} 	//if flush is activated, stored data is removed
+			w = S.get(t.id).split(";");					//column widths is obtained
 			for(;i<t.ln;i++){						//for each column
 				aux.push(100*w[i]/w[t.ln]+"%"); 	//width is stored in an array since it will be required again a couple of lines ahead
 				th.eq(i).css("width", aux[i] ); 	//each column width in % is resotred
@@ -128,14 +143,15 @@
 			for(i=0;i<t.ln;i++)
 				t.cg.eq(i).css("width", aux[i]);	//this code is required in order to create an inline CSS rule with higher precedence than an existing CSS class in the "col" elements
 		}else{							//in serialization mode (after resizing a column)
-			S[t.id] ="";				//clean up previous data
+			cont ="";				//clean up previous data
 			for(i in t.c){				//iterate through columns
 				w = t.c[i].width();		//width is obtained
-				S[t.id] += w+";";		//width is appended to the sessionStorage object using ID as key
+				cont += w+";";		//width is appended to the sessionStorage object using ID as key
 				m+=w;					//carriage is updated to obtain the full size used by columns
 			}
-			S[t.id]+=m;					//the last item of the serialized string is the table's active area (width), 
+			cont+=m;					//the last item of the serialized string is the table's active area (width), 
 										//to be able to obtain % width value of each columns while deserializing
+			S.set(t.id, cont);
 		}	
 	};
 	
